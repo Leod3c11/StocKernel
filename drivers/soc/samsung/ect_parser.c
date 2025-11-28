@@ -192,101 +192,100 @@ static int ect_parse_dvfs_header(void *address, struct ect_info *info)
     }
 
 	for (i = 0; i < ect_dvfs_header->num_of_domain; ++i) {
-		ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
-		
-		if (strcmp(ect_dvfs_domain->domain_name, "G3D") == 0) {
-			int new_num_level = ect_dvfs_domain->num_of_level + 3;
-			struct ect_dvfs_level *new_list_level;
-			unsigned int *new_list_dvfs_value;
-			int dvfs_value_size = ect_dvfs_domain->num_of_clock;
-			
-			
-new_list_level = kzalloc(sizeof(struct ect_dvfs_level) * new_num_level, GFP_KERNEL);
-				if (new_list_level == NULL) {
-					ret = -ENOMEM;
-					goto err_parse_domain;
-				}
-
-				new_list_level[0].level = 921000;
-				new_list_level[0].level_en = 0;
-
-				new_list_level[1].level = 936000;
-				new_list_level[1].level_en = 0;
-
-				new_list_level[2].level = 927000;
-				new_list_level[2].level_en = 0;
-				
-				memcpy(&new_list_level[3], 
-					   ect_dvfs_domain->list_level, 
-					   sizeof(struct ect_dvfs_level) * ect_dvfs_domain->num_of_level);
-
-new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * dvfs_value_size, GFP_KERNEL);
-				if (new_list_dvfs_value == NULL) {
-					kfree(new_list_level);
-					ret = -ENOMEM;
-					goto err_parse_domain;
-				}
-				
-				// Valores para 921000
-				new_list_dvfs_value[0 * dvfs_value_size + 0] = 0;
-				new_list_dvfs_value[0 * dvfs_value_size + 1] = 1;
-				
-				// Valores para 936000
-				new_list_dvfs_value[1 * dvfs_value_size + 0] = 0;
-				new_list_dvfs_value[1 * dvfs_value_size + 1] = 1;
-				
-				// Valores para 927000
-				new_list_dvfs_value[2 * dvfs_value_size + 0] = 0;
-				new_list_dvfs_value[2 * dvfs_value_size + 1] = 1;
-
-				memcpy(&new_list_dvfs_value[3 * dvfs_value_size], 
-					   ect_dvfs_domain->list_dvfs_value, 
-					   sizeof(unsigned int) * ect_dvfs_domain->num_of_level * dvfs_value_size);
-			
-			ect_dvfs_domain->num_of_level = new_num_level;
-			ect_dvfs_domain->list_level = new_list_level;
-			ect_dvfs_domain->list_dvfs_value = new_list_dvfs_value;
-			
-// A frequência máxima é 921000, o maior dos novos níveis.
-				if (ect_dvfs_domain->max_frequency < 921000) {
-					ect_dvfs_domain->max_frequency = 921000;
-				}
-			
-			break;
-		}
-	}
-
-    for (i = 0; i < ect_dvfs_header->num_of_domain; ++i) {
-        ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
+    ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
+    
+    if (strcmp(ect_dvfs_domain->domain_name, "G3D") == 0) {
+        int new_num_level = ect_dvfs_domain->num_of_level + 1;
+        struct ect_dvfs_level *new_list_level;
+        unsigned int *new_list_dvfs_value;
+        int dvfs_value_size = ect_dvfs_domain->num_of_clock;
         
-        if (strcmp(ect_dvfs_domain->domain_name, "CPUCL2") == 0) {
-            int new_num_level = ect_dvfs_domain->num_of_level + 3;
-            struct ect_dvfs_level *new_list_level;
-            unsigned int *new_list_dvfs_value;
-            
-            new_list_level = kzalloc(sizeof(struct ect_dvfs_level) * new_num_level, GFP_KERNEL);
-            
-            new_list_level[0].level = 3116000;
-            new_list_level[0].level_en = 0;
-            
-            memcpy(&new_list_level[1], ect_dvfs_domain->list_level,
-                   sizeof(struct ect_dvfs_level) * ect_dvfs_domain->num_of_level);
-            
-            new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * 2, GFP_KERNEL);
-            new_list_dvfs_value[0] = 0;
-            new_list_dvfs_value[1] = 0;
-            
-            memcpy(&new_list_dvfs_value[2], ect_dvfs_domain->list_dvfs_value, 
-                   sizeof(unsigned int) * ect_dvfs_domain->num_of_level * 2);
-            
-            ect_dvfs_domain->num_of_level = new_num_level;
-            ect_dvfs_domain->list_level = new_list_level;
-            ect_dvfs_domain->list_dvfs_value = new_list_dvfs_value;
-            
-            break;
+        new_list_level = kzalloc(sizeof(struct ect_dvfs_level) * new_num_level, GFP_KERNEL);
+        if (new_list_level == NULL) {
+            ret = -ENOMEM;
+            goto err_parse_domain;
         }
-    }
 
+        // Adicionar apenas 1 novo nível: 921000
+        new_list_level[0].level = 921000;
+        new_list_level[0].level_en = 0;
+        
+        memcpy(&new_list_level[1], 
+               ect_dvfs_domain->list_level, 
+               sizeof(struct ect_dvfs_level) * ect_dvfs_domain->num_of_level);
+
+        new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * dvfs_value_size, GFP_KERNEL);
+        if (new_list_dvfs_value == NULL) {
+            kfree(new_list_level);
+            ret = -ENOMEM;
+            goto err_parse_domain;
+        }
+        
+        // Valores para o novo nível 921000
+        for (int k = 0; k < dvfs_value_size; k++) {
+            new_list_dvfs_value[k] = 1; // Valor padrão
+        }
+        
+        memcpy(&new_list_dvfs_value[dvfs_value_size], 
+               ect_dvfs_domain->list_dvfs_value, 
+               sizeof(unsigned int) * ect_dvfs_domain->num_of_level * dvfs_value_size);
+        
+        ect_dvfs_domain->num_of_level = new_num_level;
+        ect_dvfs_domain->list_level = new_list_level;
+        ect_dvfs_domain->list_dvfs_value = new_list_dvfs_value;
+        
+        // Atualizar frequência máxima se necessário
+        if (ect_dvfs_domain->max_frequency < 921000) {
+            ect_dvfs_domain->max_frequency = 921000;
+        }
+        
+        break;
+    }
+}
+    for (i = 0; i < ect_dvfs_header->num_of_domain; ++i) {
+    ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
+    
+    if (strcmp(ect_dvfs_domain->domain_name, "CPUCL2") == 0) {
+        int new_num_level = ect_dvfs_domain->num_of_level + 1;
+        struct ect_dvfs_level *new_list_level;
+        unsigned int *new_list_dvfs_value;
+        
+        new_list_level = kzalloc(sizeof(struct ect_dvfs_level) * new_num_level, GFP_KERNEL);
+        if (new_list_level == NULL) {
+            ret = -ENOMEM;
+            goto err_parse_domain;
+        }
+        
+        // Adicionar apenas 1 novo nível: 3116000
+        new_list_level[0].level = 3116000;
+        new_list_level[0].level_en = 0;
+        
+        memcpy(&new_list_level[1], ect_dvfs_domain->list_level,
+               sizeof(struct ect_dvfs_level) * ect_dvfs_domain->num_of_level);
+        
+        new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * ect_dvfs_domain->num_of_clock, GFP_KERNEL);
+        if (new_list_dvfs_value == NULL) {
+            kfree(new_list_level);
+            ret = -ENOMEM;
+            goto err_parse_domain;
+        }
+        
+        // Valores para o novo nível 3116000
+        for (int k = 0; k < ect_dvfs_domain->num_of_clock; k++) {
+            new_list_dvfs_value[k] = 0; // Valor padrão
+        }
+        
+        memcpy(&new_list_dvfs_value[ect_dvfs_domain->num_of_clock], 
+               ect_dvfs_domain->list_dvfs_value, 
+               sizeof(unsigned int) * ect_dvfs_domain->num_of_level * ect_dvfs_domain->num_of_clock);
+        
+        ect_dvfs_domain->num_of_level = new_num_level;
+        ect_dvfs_domain->list_level = new_list_level;
+        ect_dvfs_domain->list_dvfs_value = new_list_dvfs_value;
+        
+        break;
+    }
+}
     info->block_handle = ect_dvfs_header;
 
     return 0;
@@ -443,35 +442,59 @@ static int ect_parse_voltage_domain(int parser_version, void *address, struct ec
     }
 
     if (strcmp(domain->domain_name, "CPUCL2") == 0) {
-        int new_num_level = 25; // 24 + 1
-        int32_t *new_level_list;
-        unsigned char *new_voltages_step;
-        int32_t *new_level_en;
-        struct ect_voltage_table *table = &domain->table_list[0];
+    int new_num_level = domain->num_of_level + 1;
+    int32_t *new_level_list;
+    unsigned char *new_voltages_step;
+    int32_t *new_level_en;
+    struct ect_voltage_table *table = &domain->table_list[0];
 
-        new_level_list = kmalloc(sizeof(int32_t) * new_num_level, GFP_KERNEL);
-        new_level_list[0] = 3116;
-        memcpy(&new_level_list[1], domain->level_list, sizeof(int32_t) * 19);
-        domain->level_list = new_level_list;
-        domain->num_of_level = new_num_level;
+    new_level_list = kmalloc(sizeof(int32_t) * new_num_level, GFP_KERNEL);
+    if (!new_level_list) {
+        ret = -ENOMEM;
+        goto err_parse_voltage_table;
+    }
+    
+    // Adicionar apenas 1 novo nível: 3116
+    new_level_list[0] = 3116;
+    memcpy(&new_level_list[1], domain->level_list, sizeof(int32_t) * domain->num_of_level);
+    
+    domain->level_list = new_level_list;
+    domain->num_of_level = new_num_level;
 
-        new_voltages_step = kmalloc(sizeof(unsigned char) * new_num_level * domain->num_of_group, GFP_KERNEL);
-        memset(new_voltages_step, 0, domain->num_of_group);
-        memcpy(&new_voltages_step[domain->num_of_group], table->voltages_step, 
-               sizeof(unsigned char) * 19 * domain->num_of_group);
-        table->voltages_step = new_voltages_step;
+    new_voltages_step = kmalloc(sizeof(unsigned char) * new_num_level * domain->num_of_group, GFP_KERNEL);
+    if (!new_voltages_step) {
+        kfree(new_level_list);
+        ret = -ENOMEM;
+        goto err_parse_voltage_table;
+    }
+    
+    // Inicializar valores do novo nível
+    for (int k = 0; k < domain->num_of_group; k++) {
+        new_voltages_step[k] = 0; // Valor padrão
+    }
+    
+    memcpy(&new_voltages_step[domain->num_of_group], table->voltages_step, 
+           sizeof(unsigned char) * domain->num_of_level * domain->num_of_group);
+    
+    table->voltages_step = new_voltages_step;
 
-        if (table->level_en) {
-            new_level_en = kmalloc(sizeof(int32_t) * new_num_level, GFP_KERNEL);
-            new_level_en[0] = 0;
-            memcpy(&new_level_en[1], table->level_en, sizeof(int32_t) * 19);
-            table->level_en = new_level_en;
+    if (table->level_en) {
+        new_level_en = kmalloc(sizeof(int32_t) * new_num_level, GFP_KERNEL);
+        if (!new_level_en) {
+            kfree(new_level_list);
+            kfree(new_voltages_step);
+            ret = -ENOMEM;
+            goto err_parse_voltage_table;
         }
-
-        if (table->boot_level_idx != -1) table->boot_level_idx++;
-        if (table->resume_level_idx != -1) table->resume_level_idx++;
+        
+        new_level_en[0] = 0;
+        memcpy(&new_level_en[1], table->level_en, sizeof(int32_t) * domain->num_of_level);
+        table->level_en = new_level_en;
     }
 
+    if (table->boot_level_idx != -1) table->boot_level_idx++;
+    if (table->resume_level_idx != -1) table->resume_level_idx++;
+}
     return 0;
 
 err_parse_voltage_table:
