@@ -207,7 +207,7 @@ new_list_level = kzalloc(sizeof(struct ect_dvfs_level) * new_num_level, GFP_KERN
 					goto err_parse_domain;
 				}
 
-				new_list_level[0].level = 949000;
+				new_list_level[0].level = 921000;
 				new_list_level[0].level_en = 0;
 
 				new_list_level[1].level = 936000;
@@ -227,7 +227,7 @@ new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * dvfs_value_
 					goto err_parse_domain;
 				}
 				
-				// Valores para 949000
+				// Valores para 921000
 				new_list_dvfs_value[0 * dvfs_value_size + 0] = 0;
 				new_list_dvfs_value[0 * dvfs_value_size + 1] = 1;
 				
@@ -247,9 +247,9 @@ new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * dvfs_value_
 			ect_dvfs_domain->list_level = new_list_level;
 			ect_dvfs_domain->list_dvfs_value = new_list_dvfs_value;
 			
-// A frequência máxima é 949000, o maior dos novos níveis.
-				if (ect_dvfs_domain->max_frequency < 949000) {
-					ect_dvfs_domain->max_frequency = 949000;
+// A frequência máxima é 921000, o maior dos novos níveis.
+				if (ect_dvfs_domain->max_frequency < 921000) {
+					ect_dvfs_domain->max_frequency = 921000;
 				}
 			
 			break;
@@ -547,7 +547,7 @@ static int ect_parse_voltage_header(void *address, struct ect_info *info)
 				goto err_parse_voltage_domain;
 			}
 			
-			new_level_list[0] = 949;
+			new_level_list[0] = 921;
 			
 			memcpy(&new_level_list[1], 
 			       ect_voltage_domain->level_list, 
@@ -1243,7 +1243,7 @@ static int ect_parse_gen_param_header(void *address, struct ect_info *info)
             
             for (j = 0; j < ect_gen_param_table->num_of_col; j++) {
                 if (j == 0) {
-                    new_parameter[j] = 949;
+                    new_parameter[j] = 921;
                 } else {
                     new_parameter[j] = ect_gen_param_table->parameter[j];
                 }
@@ -1276,7 +1276,7 @@ static int ect_parse_gen_param_header(void *address, struct ect_info *info)
             
             for (j = 0; j < ect_gen_param_table->num_of_col; j++) {
                 if (j == 0) {
-                    new_parameter[j] = 949;
+                    new_parameter[j] = 921;
                 } else {
                     new_parameter[j] = ect_gen_param_table->parameter[j];
                 }
