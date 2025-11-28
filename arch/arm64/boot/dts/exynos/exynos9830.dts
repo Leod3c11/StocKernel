@@ -11683,10 +11683,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
@@ -11946,10 +11946,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
@@ -12209,10 +12209,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
@@ -12478,10 +12478,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
@@ -12749,10 +12749,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
@@ -13012,10 +13012,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
@@ -13281,10 +13281,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
@@ -13382,10 +13382,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				idle_weight {
@@ -13483,10 +13483,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				ontime {
@@ -13664,10 +13664,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
@@ -13787,10 +13787,10 @@
 				cpus_allowed {
 					target-sched-class = <0x08>;
 					root = "0-7";
-					foreground = "0-7";
-					background = "0-7";
+					foreground = "0-5";
+					background = "0-5";
 					top-app = "0-7";
-					rt = "0-7";
+					rt = "0-5";
 				};
 
 				esg {
