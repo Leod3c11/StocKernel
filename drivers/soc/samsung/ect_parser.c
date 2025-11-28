@@ -11,6 +11,17 @@
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+
+#include <linux/utsname.h>
+
+/* Declarations for complete ECT dump in /sys/kernel/dump/ */
+static int ect_create_complete_dump(void);
+static ssize_t ect_dump_complete_read(struct file *file, struct kobject *kobj,
+                                    struct bin_attribute *bin_attr, char *buf,
+                                    loff_t pos, size_t count);
+
 #define ALIGNMENT_SIZE	 4
 
 #define S5P_VA_ECT (VMALLOC_START + 0xF6000000 + 0x02D00000)
@@ -130,59 +141,110 @@ err_list_clock_allocation:
 
 static int ect_parse_dvfs_header(void *address, struct ect_info *info)
 {
-	int ret = 0;
-	int i;
-	char *domain_name;
-	unsigned int length, offset;
-	struct ect_dvfs_header *ect_dvfs_header;
-	struct ect_dvfs_domain *ect_dvfs_domain;
-	void *address_dvfs_header = address;
+    int ret = 0;
+    int i;
+    char *domain_name;
+    unsigned int length, offset;
+    struct ect_dvfs_header *ect_dvfs_header;
+    struct ect_dvfs_domain *ect_dvfs_domain;
+    void *address_dvfs_header = address;
 
-	if (address == NULL)
-		return -EINVAL;
+    if (address == NULL)
+        return -EINVAL;
 
-	ect_dvfs_header = kzalloc(sizeof(struct ect_dvfs_header), GFP_KERNEL);
-	if (ect_dvfs_header == NULL)
-		return -ENOMEM;
+    ect_dvfs_header = kzalloc(sizeof(struct ect_dvfs_header), GFP_KERNEL);
+    if (ect_dvfs_header == NULL)
+        return -ENOMEM;
 
-	ect_parse_integer(&address, &ect_dvfs_header->parser_version);
-	ect_parse_integer(&address, &ect_dvfs_header->version);
-	ect_parse_integer(&address, &ect_dvfs_header->num_of_domain);
+    ect_parse_integer(&address, &ect_dvfs_header->parser_version);
+    ect_parse_integer(&address, &ect_dvfs_header->version);
+    ect_parse_integer(&address, &ect_dvfs_header->num_of_domain);
 
-	ect_dvfs_header->domain_list = kzalloc(sizeof(struct ect_dvfs_domain) * ect_dvfs_header->num_of_domain,
-						GFP_KERNEL);
-	if (ect_dvfs_header->domain_list == NULL) {
-		ret = -EINVAL;
-		goto err_domain_list_allocation;
-	}
+    ect_dvfs_header->domain_list = kzalloc(sizeof(struct ect_dvfs_domain) * ect_dvfs_header->num_of_domain,
+                        GFP_KERNEL);
+    if (ect_dvfs_header->domain_list == NULL) {
+        ret = -EINVAL;
+        goto err_domain_list_allocation;
+    }
+
+    for (i = 0; i < ect_dvfs_header->num_of_domain; ++i) {
+        if (ect_parse_string(&address, &domain_name, &length)) {
+            ret = -EINVAL;
+            goto err_parse_string;
+        }
+
+        ect_parse_integer(&address, &offset);
+
+        ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
+        ect_dvfs_domain->domain_name = domain_name;
+        ect_dvfs_domain->domain_offset = offset;
+    }
+
+    for (i = 0; i < ect_dvfs_header->num_of_domain; ++i) {
+        ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
+
+        if (ect_parse_dvfs_domain(ect_dvfs_header->parser_version,
+                        address_dvfs_header + ect_dvfs_domain->domain_offset,
+                        ect_dvfs_domain)) {
+            ret = -EINVAL;
+            goto err_parse_domain;
+        }
+    }
 
 	for (i = 0; i < ect_dvfs_header->num_of_domain; ++i) {
-		if (ect_parse_string(&address, &domain_name, &length)) {
-			ret = -EINVAL;
-			goto err_parse_string;
-		}
-
-		ect_parse_integer(&address, &offset);
-
 		ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
-		ect_dvfs_domain->domain_name = domain_name;
-		ect_dvfs_domain->domain_offset = offset;
+		
+		if (strcmp(ect_dvfs_domain->domain_name, "G3D") == 0) {
+			int new_num_level = ect_dvfs_domain->num_of_level + 1;
+			struct ect_dvfs_level *new_list_level;
+			unsigned int *new_list_dvfs_value;
+			int dvfs_value_size = ect_dvfs_domain->num_of_clock;
+			
+			
+new_list_level = kzalloc(sizeof(struct ect_dvfs_level) * new_num_level, GFP_KERNEL);
+				if (new_list_level == NULL) {
+					ret = -ENOMEM;
+					goto err_parse_domain;
+				}
+
+				new_list_level[0].level = 921000;
+				new_list_level[0].level_en = 1;
+				
+				memcpy(&new_list_level[0], 
+					   ect_dvfs_domain->list_level, 
+					   sizeof(struct ect_dvfs_level) * ect_dvfs_domain->num_of_level);
+
+new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * dvfs_value_size, GFP_KERNEL);
+				if (new_list_dvfs_value == NULL) {
+					kfree(new_list_level);
+					ret = -ENOMEM;
+					goto err_parse_domain;
+				}
+				
+				// Valores para 921000
+				new_list_dvfs_value[0 * dvfs_value_size + 0] = 0;
+				new_list_dvfs_value[0 * dvfs_value_size + 1] = 1;
+
+				memcpy(&new_list_dvfs_value[0 * dvfs_value_size], 
+					   ect_dvfs_domain->list_dvfs_value, 
+					   sizeof(unsigned int) * ect_dvfs_domain->num_of_level * dvfs_value_size);
+			
+			ect_dvfs_domain->num_of_level = new_num_level;
+			ect_dvfs_domain->list_level = new_list_level;
+			ect_dvfs_domain->list_dvfs_value = new_list_dvfs_value;
+			
+// A frequência máxima é 949000, o maior dos novos níveis.
+				if (ect_dvfs_domain->max_frequency < 921000) {
+					ect_dvfs_domain->max_frequency = 921000;
+				}
+			
+			break;
+		}
 	}
 
-	for (i = 0; i < ect_dvfs_header->num_of_domain; ++i) {
-		ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
+    info->block_handle = ect_dvfs_header;
 
-		if (ect_parse_dvfs_domain(ect_dvfs_header->parser_version,
-						address_dvfs_header + ect_dvfs_domain->domain_offset,
-						ect_dvfs_domain)) {
-			ret = -EINVAL;
-			goto err_parse_domain;
-		}
-	}
-
-	info->block_handle = ect_dvfs_header;
-
-	return 0;
+    return 0;
 
 err_parse_domain:
 err_parse_string:
@@ -191,6 +253,7 @@ err_domain_list_allocation:
 	kfree(ect_dvfs_header);
 	return ret;
 }
+
 
 static int ect_parse_pll(int parser_version, void *address, struct ect_pll *ect_pll)
 {
@@ -308,33 +371,37 @@ static int ect_parse_voltage_table(int parser_version, void **address, struct ec
 
 static int ect_parse_voltage_domain(int parser_version, void *address, struct ect_voltage_domain *domain)
 {
-	int ret = 0;
-	int i;
+   int ret = 0;
+    int i;
 
-	ect_parse_integer(&address, &domain->num_of_group);
-	ect_parse_integer(&address, &domain->num_of_level);
-	ect_parse_integer(&address, &domain->num_of_table);
+    ect_parse_integer(&address, &domain->num_of_group);
+    ect_parse_integer(&address, &domain->num_of_level);
+    ect_parse_integer(&address, &domain->num_of_table);
 
-	domain->level_list = address;
-	address += sizeof(int32_t) * domain->num_of_level;
+    domain->level_list = address;
+    address += sizeof(int32_t) * domain->num_of_level;
 
-	domain->table_list = kzalloc(sizeof(struct ect_voltage_table) * domain->num_of_table, GFP_KERNEL);
-	if (domain->table_list == NULL) {
-		ret = -ENOMEM;
-		goto err_table_list_allocation;
-	}
+    domain->table_list = kzalloc(sizeof(struct ect_voltage_table) * domain->num_of_table, GFP_KERNEL);
+    if (domain->table_list == NULL) {
+        ret = -ENOMEM;
+        goto err_table_list_allocation;
+    }
 
-	for (i = 0; i < domain->num_of_table; ++i) {
-		if (ect_parse_voltage_table(parser_version,
-						&address,
-						domain,
-						&domain->table_list[i])) {
-			ret = -EINVAL;
-			goto err_parse_voltage_table;
-		}
-	}
+    for (i = 0; i < domain->num_of_table; ++i) {
+        if (ect_parse_voltage_table(parser_version,
+                        &address,
+                        domain,
+                        &domain->table_list[i])) {
+            ret = -EINVAL;
+            goto err_parse_voltage_table;
+        }
+    }
 
-	return 0;
+        if (table->boot_level_idx != -1) table->boot_level_idx++;
+        if (table->resume_level_idx != -1) table->resume_level_idx++;
+    }
+
+    return 0;
 
 err_parse_voltage_table:
 	kfree(domain->table_list);
@@ -391,6 +458,81 @@ static int ect_parse_voltage_header(void *address, struct ect_info *info)
 						ect_voltage_domain)) {
 			ret = -EINVAL;
 			goto err_parse_voltage_domain;
+		}
+	}
+
+	for (i = 0; i < ect_voltage_header->num_of_domain; ++i) {
+		ect_voltage_domain = &ect_voltage_header->domain_list[i];
+		
+		if (strcmp(ect_voltage_domain->domain_name, "G3D") == 0) {
+			int new_num_level = ect_voltage_domain->num_of_level + 1;
+			unsigned int *new_level_list;
+			int j;
+
+			
+			new_level_list = kzalloc(sizeof(unsigned int) * new_num_level, GFP_KERNEL);
+			if (new_level_list == NULL) {
+				ret = -ENOMEM;
+				goto err_parse_voltage_domain;
+			}
+			
+			new_level_list[0] = 921;
+			
+			memcpy(&new_level_list[1], 
+			       ect_voltage_domain->level_list, 
+			       sizeof(unsigned int) * ect_voltage_domain->num_of_level);
+			
+			ect_voltage_domain->level_list = new_level_list;
+			
+			for (j = 0; j < ect_voltage_domain->num_of_table; ++j) {
+				struct ect_voltage_table *table = &ect_voltage_domain->table_list[j];
+				
+				if (table->voltages_step != NULL) {
+					unsigned char *new_voltages_step;
+					int num_of_data = ect_voltage_domain->num_of_group * new_num_level;
+					int old_num_data = ect_voltage_domain->num_of_group * ect_voltage_domain->num_of_level;
+					
+					new_voltages_step = kzalloc(sizeof(unsigned char) * num_of_data, GFP_KERNEL);
+					if (new_voltages_step == NULL) {
+						kfree(new_level_list);
+						ret = -ENOMEM;
+						goto err_parse_voltage_domain;
+					}
+					
+					int k;
+					for (k = 0; k < ect_voltage_domain->num_of_group; k++) {
+						new_voltages_step[k * new_num_level] = 120;
+						
+						memcpy(&new_voltages_step[k * new_num_level + 1],
+						       &table->voltages_step[k * ect_voltage_domain->num_of_level],
+						       sizeof(unsigned char) * ect_voltage_domain->num_of_level);
+					}
+					
+					table->voltages_step = new_voltages_step;
+				}
+				
+				if (table->level_en != NULL) {
+					int *new_level_en;
+					new_level_en = kzalloc(sizeof(int) * new_num_level, GFP_KERNEL);
+					if (new_level_en == NULL) {
+						kfree(new_level_list);
+						ret = -ENOMEM;
+						goto err_parse_voltage_domain;
+					}
+					
+					new_level_en[0] = 0;
+					
+					memcpy(&new_level_en[1], 
+					       table->level_en, 
+					       sizeof(int) * ect_voltage_domain->num_of_level);
+					
+					table->level_en = new_level_en;
+				}
+			}
+			
+			ect_voltage_domain->num_of_level = new_num_level;
+			
+			break;
 		}
 	}
 
@@ -870,60 +1012,125 @@ static int ect_parse_gen_param_table(int parser_version, void *address, struct e
 
 static int ect_parse_gen_param_header(void *address, struct ect_info *info)
 {
-	int ret = 0;
-	int i;
-	char *table_name;
-	unsigned int length, offset;
-	struct ect_gen_param_header *ect_gen_param_header;
-	struct ect_gen_param_table *ect_gen_param_table;
-	void *address_param_header = address;
+    int ret = 0;
+    int i;
+    char *table_name;
+    unsigned int length, offset;
+    struct ect_gen_param_header *ect_gen_param_header;
+    struct ect_gen_param_table *ect_gen_param_table;
+    void *address_param_header = address;
 
-	if (address == NULL)
-		return -EINVAL;
+    if (address == NULL)
+        return -EINVAL;
 
-	ect_gen_param_header = kzalloc(sizeof(struct ect_gen_param_header), GFP_KERNEL);
-	if (ect_gen_param_header == NULL)
-		return -ENOMEM;
+    ect_gen_param_header = kzalloc(sizeof(struct ect_gen_param_header), GFP_KERNEL);
+    if (ect_gen_param_header == NULL)
+        return -ENOMEM;
 
-	ect_parse_integer(&address, &ect_gen_param_header->parser_version);
-	ect_parse_integer(&address, &ect_gen_param_header->version);
-	ect_parse_integer(&address, &ect_gen_param_header->num_of_table);
+    ect_parse_integer(&address, &ect_gen_param_header->parser_version);
+    ect_parse_integer(&address, &ect_gen_param_header->version);
+    ect_parse_integer(&address, &ect_gen_param_header->num_of_table);
 
-	ect_gen_param_header->table_list = kzalloc(sizeof(struct ect_gen_param_table) * ect_gen_param_header->num_of_table,
-								GFP_KERNEL);
-	if (ect_gen_param_header->table_list == NULL) {
-		ret = -ENOMEM;
-		goto err_table_list_allocation;
-	}
+    ect_gen_param_header->table_list = kzalloc(sizeof(struct ect_gen_param_table) * ect_gen_param_header->num_of_table,
+                                GFP_KERNEL);
+    if (ect_gen_param_header->table_list == NULL) {
+        ret = -ENOMEM;
+        goto err_table_list_allocation;
+    }
 
-	for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
-		if (ect_parse_string(&address, &table_name, &length)) {
-			ret = -EINVAL;
-			goto err_parse_string;
-		}
+    for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
+        if (ect_parse_string(&address, &table_name, &length)) {
+            ret = -EINVAL;
+            goto err_parse_string;
+        }
 
-		ect_parse_integer(&address, &offset);
+        ect_parse_integer(&address, &offset);
 
-		ect_gen_param_table = &ect_gen_param_header->table_list[i];
-		ect_gen_param_table->table_name = table_name;
-		ect_gen_param_table->offset = offset;
-	}
+        ect_gen_param_table = &ect_gen_param_header->table_list[i];
+        ect_gen_param_table->table_name = table_name;
+        ect_gen_param_table->offset = offset;
+    }
 
-	for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
-		ect_gen_param_table = &ect_gen_param_header->table_list[i];
+    for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
+        ect_gen_param_table = &ect_gen_param_header->table_list[i];
 
-		if (ect_parse_gen_param_table(ect_gen_param_header->parser_version,
-							address_param_header + ect_gen_param_table->offset,
-							ect_gen_param_table)) {
-			ret = -EINVAL;
-			goto err_parse_gen_param_table;
-		}
-	}
+        if (ect_parse_gen_param_table(ect_gen_param_header->parser_version,
+                            address_param_header + ect_gen_param_table->offset,
+                            ect_gen_param_table)) {
+            ret = -EINVAL;
+            goto err_parse_gen_param_table;
+        }
+    }
 
-	info->block_handle = ect_gen_param_header;
+    for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
+        ect_gen_param_table = &ect_gen_param_header->table_list[i];
+        
+        if (strcmp(ect_gen_param_table->table_name, "MG3D") == 0) {
+            int new_num_row = ect_gen_param_table->num_of_row + 1;
+            int32_t *new_parameter;
+	        int j;
+            
+            new_parameter = kmalloc(sizeof(int32_t) * new_num_row * ect_gen_param_table->num_of_col, GFP_KERNEL);
+			            if (new_parameter == NULL) {
+                ret = -ENOMEM;
+                goto err_parse_gen_param_table;
+            }
+            
+            for (j = 0; j < ect_gen_param_table->num_of_col; j++) {
+                if (j == 0) {
+                    new_parameter[j] = 921;
+                } else {
+                    new_parameter[j] = ect_gen_param_table->parameter[j];
+                }
+            }
+            
+            memcpy(&new_parameter[ect_gen_param_table->num_of_col], 
+                   ect_gen_param_table->parameter, 
+                   sizeof(int32_t) * ect_gen_param_table->num_of_row * ect_gen_param_table->num_of_col);
+            
+            ect_gen_param_table->num_of_row = new_num_row;
+            ect_gen_param_table->parameter = new_parameter;
 
-	return 0;
+            break;
+        }
+    }
 
+    for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
+        ect_gen_param_table = &ect_gen_param_header->table_list[i];
+        
+        if (strcmp(ect_gen_param_table->table_name, "VG3D") == 0) {
+            int new_num_row = ect_gen_param_table->num_of_row + 1;
+            int32_t *new_parameter;
+            int j;
+            
+            new_parameter = kmalloc(sizeof(int32_t) * new_num_row * ect_gen_param_table->num_of_col, GFP_KERNEL);
+            if (new_parameter == NULL) {
+                ret = -ENOMEM;
+                goto err_parse_gen_param_table;
+			}
+            
+            for (j = 0; j < ect_gen_param_table->num_of_col; j++) {
+                if (j == 0) {
+                    new_parameter[j] = 921;
+                } else {
+                    new_parameter[j] = ect_gen_param_table->parameter[j];
+                }
+			}
+            
+            memcpy(&new_parameter[ect_gen_param_table->num_of_col], 
+                   ect_gen_param_table->parameter,
+                   sizeof(int32_t) * ect_gen_param_table->num_of_row * ect_gen_param_table->num_of_col);
+            
+            ect_gen_param_table->num_of_row = new_num_row;
+            ect_gen_param_table->parameter = new_parameter;
+            
+            break;
+        }
+    }
+
+    info->block_handle = ect_gen_param_header;
+
+    return 0;
 err_parse_gen_param_table:
 err_parse_string:
 	kfree(ect_gen_param_header->table_list);
@@ -1238,6 +1445,27 @@ static struct ect_info ect_header_info = {
 	.dump_node_name = SYSFS_NODE_HEADER,
 	.block_handle = NULL,
 	.block_precedence = -1,
+};
+
+static struct kobject *ect_dump_kobj;
+static char *ect_complete_dump_buffer;
+static size_t ect_complete_dump_size;
+static const size_t ECT_DUMP_BUFFER_SIZE = 2 * 1024 * 1024; // 2MB
+static bool ect_dump_initialized = false;
+
+static struct kobject *dump_kobj;
+static char *ect_dump_complete_buffer;
+static size_t ect_dump_complete_size;
+static const size_t ECT_DUMP_COMPLETE_SIZE = 3 * 1024 * 1024; // 3MB
+static bool ect_dump_complete_ready = false;
+
+static struct bin_attribute ect_dump_complete_attr = {
+    .attr = {
+        .name = "ect_dump_complete",
+        .mode = 0444,
+    },
+    .read = ect_dump_complete_read,
+    .size = 0,
 };
 
 static struct ect_info ect_list[] = {
@@ -2108,6 +2336,393 @@ static struct file_operations ops_all_dump = {
 	.release = single_release,
 };
 
+static int ect_generate_complete_dump(void)
+{
+    struct ect_info *info;
+    struct ect_header *header;
+    int i, j, k, l, m;
+    ssize_t count = 0;
+
+    if (!ect_complete_dump_buffer) {
+        ect_complete_dump_buffer = vmalloc(ECT_DUMP_BUFFER_SIZE);
+        if (!ect_complete_dump_buffer) {
+            return -ENOMEM;
+        }
+    }
+
+    header = ect_header_info.block_handle;
+    if (header) {
+        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                         "========================================\n");
+        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                         "         ECT COMPLETE DUMP\n");
+        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                         "========================================\n");
+        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                         "Signature: %c%c%c%c\n",
+                         header->sign[0], header->sign[1],
+                         header->sign[2], header->sign[3]);
+        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                         "Version: %c%c%c%c\n",
+                         header->version[0], header->version[1],
+                         header->version[2], header->version[3]);
+        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                         "Total Size: %d bytes\n", header->total_size);
+        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                         "Number of Headers: %d\n\n", header->num_of_header);
+    }
+
+    for (i = 0; i < ARRAY_SIZE32(ect_list); i++) {
+        for (j = 0; j < ARRAY_SIZE32(ect_list); j++) {
+            info = &ect_list[j];
+            
+            if (info->block_precedence != i || !info->block_handle)
+                continue;
+
+            count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                             "########################################\n");
+            count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                             "BLOCK: %s\n", info->block_name);
+            count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                             "########################################\n");
+
+            if (strcmp(info->block_name, BLOCK_ASV) == 0) {
+                struct ect_voltage_header *voltage_header = info->block_handle;
+                count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                 "Parser Version: %d\n", voltage_header->parser_version);
+                count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                 "Number of Domains: %d\n", voltage_header->num_of_domain);
+
+                for (k = 0; k < voltage_header->num_of_domain; k++) {
+                    struct ect_voltage_domain *domain = &voltage_header->domain_list[k];
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                     "\n  DOMAIN: %s\n", domain->domain_name);
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                     "    Groups: %d, Levels: %d, Tables: %d\n",
+                                     domain->num_of_group, domain->num_of_level, domain->num_of_table);
+                    
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                     "    Frequencies: ");
+                    for (l = 0; l < domain->num_of_level; l++) {
+                        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                         "%u ", domain->level_list[l]);
+                    }
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count, "\n");
+                }
+
+            } else if (strcmp(info->block_name, BLOCK_DVFS) == 0) {
+                struct ect_dvfs_header *dvfs_header = info->block_handle;
+                count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                 "Parser Version: %d\n", dvfs_header->parser_version);
+                count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                 "Number of Domains: %d\n", dvfs_header->num_of_domain);
+
+                for (k = 0; k < dvfs_header->num_of_domain; k++) {
+                    struct ect_dvfs_domain *domain = &dvfs_header->domain_list[k];
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                     "\n  DOMAIN: %s\n", domain->domain_name);
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                     "    Clocks: %d, Levels: %d\n",
+                                     domain->num_of_clock, domain->num_of_level);
+                    
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                     "    Level List: ");
+                    for (l = 0; l < domain->num_of_level; l++) {
+                        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                         "%ukHz(%c) ", domain->list_level[l].level,
+                                         domain->list_level[l].level_en ? 'E' : 'D');
+                    }
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count, "\n");
+                }
+
+            } else if (strcmp(info->block_name, BLOCK_GEN_PARAM) == 0) {
+                struct ect_gen_param_header *gen_header = info->block_handle;
+                count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                 "Parser Version: %d\n", gen_header->parser_version);
+                count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                 "Number of Tables: %d\n", gen_header->num_of_table);
+
+                for (k = 0; k < gen_header->num_of_table; k++) {
+                    struct ect_gen_param_table *table = &gen_header->table_list[k];
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                     "\n  TABLE: %s\n", table->table_name);
+                    count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                     "    Rows: %d, Columns: %d\n",
+                                     table->num_of_row, table->num_of_col);
+                    
+                    if (strcmp(table->table_name, "FCPUCL2") == 0) {
+                        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                         "    Parameters: ");
+                        for (l = 0; l < table->num_of_row * table->num_of_col; l++) {
+                            count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                             "%u ", table->parameter[l]);
+                        }
+                        count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count, "\n");
+                    }
+                }
+            }
+
+            count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count, "\n");
+            
+            if (count >= ECT_DUMP_BUFFER_SIZE - 1000) {
+                count += snprintf(ect_complete_dump_buffer + count, ECT_DUMP_BUFFER_SIZE - count,
+                                "\n*** BUFFER LIMIT REACHED - DUMP TRUNCATED ***\n");
+                break;
+            }
+        }
+        
+        if (count >= ECT_DUMP_BUFFER_SIZE - 1000) {
+            break;
+        }
+    }
+
+    ect_complete_dump_size = count;
+    ect_dump_initialized = true;
+
+    return 0;
+}
+
+static ssize_t ect_complete_dump_read(struct file *file, struct kobject *kobj,
+                                    struct bin_attribute *bin_attr, char *buf,
+                                    loff_t pos, size_t count)
+{
+
+    if (!ect_dump_initialized) {
+        int ret = ect_generate_complete_dump();
+        if (ret) {
+            return ret;
+        }
+
+        bin_attr->size = ect_complete_dump_size;
+    }
+
+    if (pos >= ect_complete_dump_size)
+        return 0;
+    
+    if (pos + count > ect_complete_dump_size)
+        count = ect_complete_dump_size - pos;
+    
+    memcpy(buf, ect_complete_dump_buffer + pos, count);
+    return count;
+}
+
+static int ect_create_complete_dump(void)
+{
+    struct ect_info *info;
+    struct ect_header *header;
+    int i, j, k, l;
+    ssize_t count = 0;
+
+    if (!ect_dump_complete_buffer) {
+        ect_dump_complete_buffer = vmalloc(ECT_DUMP_COMPLETE_SIZE);
+        if (!ect_dump_complete_buffer) {
+        return -ENOMEM;
+        }
+    }
+
+    header = ect_header_info.block_handle;
+    if (header) {
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "============================================================\n");
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "                   ECT COMPLETE DUMP                       \n");
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "                  Kernel: %s                  \n", init_utsname()->release);
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "============================================================\n");
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "  Signature: %c%c%c%c\n",
+                         header->sign[0], header->sign[1], header->sign[2], header->sign[3]);
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "  Version: %c%c%c%c\n",
+                         header->version[0], header->version[1], header->version[2], header->version[3]);
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "  Total Size: %d bytes\n", header->total_size);
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "  Headers: %d\n", header->num_of_header);
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "============================================================\n\n");
+    } else {
+        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                         "!!! ECT HEADER NOT AVAIBLE !!!\n\n");
+    }
+
+    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                     "AVAIBLE ECT HEADERS:\n");
+    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                     "------------------------------------------------------------\n");
+    
+    for (i = 0; i < ARRAY_SIZE32(ect_list); i++) {
+        for (j = 0; j < ARRAY_SIZE32(ect_list); j++) {
+            info = &ect_list[j];
+            if (info->block_precedence != i) continue;
+            
+            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                             "- %s: %s\n", 
+                             info->block_name, 
+                             info->block_handle ? "AVAIBLE" : "NOT LOADED");
+        }
+    }
+    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count, "\n");
+
+    for (i = 0; i < ARRAY_SIZE32(ect_list); i++) {
+        for (j = 0; j < ARRAY_SIZE32(ect_list); j++) {
+            info = &ect_list[j];
+            
+            if (info->block_precedence != i || !info->block_handle)
+                continue;
+
+            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                             "------------------------------------------------------------\n");
+            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                             "BLOCO: %s\n", info->block_name);
+            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                             "------------------------------------------------------------\n");
+
+            if (strcmp(info->block_name, BLOCK_ASV) == 0) {
+                struct ect_voltage_header *voltage_header = info->block_handle;
+                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                 "  Parser Version: %d\n", voltage_header->parser_version);
+                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                 "  Dominios: %d\n", voltage_header->num_of_domain);
+
+                for (k = 0; k < voltage_header->num_of_domain; k++) {
+                    struct ect_voltage_domain *domain = &voltage_header->domain_list[k];
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "\n  DOMAIN: %s\n", domain->domain_name);
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "    Groups: %d, levels: %d, Tabelas: %d\n",
+                                     domain->num_of_group, domain->num_of_level, domain->num_of_table);
+                    
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "    Freqs: ");
+                    if (domain->level_list) {
+                        for (l = 0; l < domain->num_of_level; l++) {
+                            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                             "%uMHz ", domain->level_list[l]);
+                        }
+                    }
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count, "\n");
+                    
+                    for (l = 0; l < domain->num_of_table; l++) {
+                        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                         "    Table %d: Version=%d, Boot=%d, Resume=%d\n",
+                                         l, 
+                                         domain->table_list[l].table_version,
+                                         domain->table_list[l].boot_level_idx,
+                                         domain->table_list[l].resume_level_idx);
+                    }
+                }
+
+            } else if (strcmp(info->block_name, BLOCK_DVFS) == 0) {
+                struct ect_dvfs_header *dvfs_header = info->block_handle;
+                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                 "  Parser Version: %d\n", dvfs_header->parser_version);
+                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                 "  Dominios: %d\n", dvfs_header->num_of_domain);
+
+                for (k = 0; k < dvfs_header->num_of_domain; k++) {
+                    struct ect_dvfs_domain *domain = &dvfs_header->domain_list[k];
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "\n  DOMINIO: %s\n", domain->domain_name);
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "    Clocks: %d, Niveis: %d\n",
+                                     domain->num_of_clock, domain->num_of_level);
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "    Boot: %d, Resume: %d\n",
+                                     domain->boot_level_idx, domain->resume_level_idx);
+                    
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "    Niveis: ");
+                    if (domain->list_level) {
+                        for (l = 0; l < domain->num_of_level; l++) {
+                            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                             "%ukHz(%c) ", 
+                                             domain->list_level[l].level / 1000,
+                                             domain->list_level[l].level_en ? 'E' : 'D');
+                        }
+                    }
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count, "\n");
+                }
+
+            } else if (strcmp(info->block_name, BLOCK_GEN_PARAM) == 0) {
+                struct ect_gen_param_header *gen_header = info->block_handle;
+                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                 "  Parser Version: %d\n", gen_header->parser_version);
+                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                 "  Tabelas: %d\n", gen_header->num_of_table);
+
+                for (k = 0; k < gen_header->num_of_table; k++) {
+                    struct ect_gen_param_table *table = &gen_header->table_list[k];
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "\n  TABELA: %s\n", table->table_name);
+                    count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                     "    Linhas: %d, Colunas: %d\n",
+                                     table->num_of_row, table->num_of_col);
+                    
+                    if (strcmp(table->table_name, "FCPUCL2") == 0 && table->parameter) {
+                        int m;
+                        count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                         "    Parametros:\n");
+                        for (l = 0; l < table->num_of_row; l++) {
+                            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                             "      ");
+                            for (m = 0; m < table->num_of_col; m++) {
+                                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                                 "%-6u ", table->parameter[l * table->num_of_col + m]);
+                            }
+                            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count, "\n");
+                        }
+                    }
+                }
+
+            } else {
+                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                 "  Handle: %p\n", info->block_handle);
+            }
+
+            count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count, "\n");
+            
+            if (count >= ECT_DUMP_COMPLETE_SIZE - 2000) {
+                count += snprintf(ect_dump_complete_buffer + count, ECT_DUMP_COMPLETE_SIZE - count,
+                                "\n!!! warning: overlimit !!!\n");
+                goto buffer_full;
+            }
+        }
+    }
+
+buffer_full:
+    ect_dump_complete_size = count;
+    ect_dump_complete_ready = true;
+    
+    return 0;
+}
+
+static ssize_t ect_dump_complete_read(struct file *file, struct kobject *kobj,
+                                    struct bin_attribute *bin_attr, char *buf,
+                                    loff_t pos, size_t count)
+{
+
+    if (!ect_dump_complete_ready) {
+        int ret = ect_create_complete_dump();
+        if (ret) {
+			pr_err("ECT: error to generate dump: %d\n", ret);
+            return ret;
+        }
+
+        bin_attr->size = ect_dump_complete_size;
+    }
+
+    if (pos >= ect_dump_complete_size)
+        return 0;
+    
+    if (pos + count > ect_dump_complete_size)
+        count = ect_dump_complete_size - pos;
+    
+    memcpy(buf, ect_dump_complete_buffer + pos, count);
+    return count;
+}
+
 static ssize_t create_binary_store(struct class *class,
 		struct class_attribute *attr, const char *buf, size_t size)
 {
@@ -2153,47 +2768,45 @@ static CLASS_ATTR_WO(create_binary);
 
 static int ect_dump_init(void)
 {
-	int i;
+	int i, ret;
 	struct dentry *root, *d;
 
-	root = debugfs_create_dir("ect", NULL);
-	if (!root) {
-		pr_err("%s: couln't create debugfs\n", __FILE__);
-		return -ENOMEM;
-	}
+    dump_kobj = kobject_create_and_add("dump", kernel_kobj);
+    if (!dump_kobj) {
+        return -ENOMEM;
+    }
 
-	d = debugfs_create_file("all_dump", S_IRUGO, root, NULL,
-				&ops_all_dump);
-	if (!d)
-		return -ENOMEM;
+    ret = sysfs_create_bin_file(dump_kobj, &ect_dump_complete_attr);
+    if (ret) {
+        kobject_put(dump_kobj);
+        return ret;
+    }
 
-	d = debugfs_create_file(ect_header_info.dump_node_name, S_IRUGO, root, &ect_header_info,
-				&ect_header_info.dump_ops);
-	if (!d)
-		return -ENOMEM;
+    root = debugfs_create_dir("ect", NULL);
+    if (!root) {
+        pr_err("%s: couldn't create debugfs\n", __FILE__);
+    }
 
-	for (i = 0; i < ARRAY_SIZE32(ect_list); ++i) {
-		if (ect_list[i].block_handle == NULL)
-			continue;
+    d = debugfs_create_file("all_dump", S_IRUGO, root, NULL, &ops_all_dump);
+    
+    d = debugfs_create_file(ect_header_info.dump_node_name, S_IRUGO, root, &ect_header_info,
+                &ect_header_info.dump_ops);
 
-		d = debugfs_create_file(ect_list[i].dump_node_name, S_IRUGO, root, &(ect_list[i]),
-					&ect_list[i].dump_ops);
-		if (!d)
-			return -ENOMEM;
-	}
+    for (i = 0; i < ARRAY_SIZE32(ect_list); ++i) {
+        if (ect_list[i].block_handle == NULL)
+            continue;
 
-	ect_class = class_create(THIS_MODULE, "ect");
-	if (IS_ERR(ect_class)) {
-		pr_err("%s: couldn't create class\n", __FILE__);
-		return PTR_ERR(ect_class);
-	}
+        d = debugfs_create_file(ect_list[i].dump_node_name, S_IRUGO, root, &(ect_list[i]),
+                    &ect_list[i].dump_ops);
+    }
 
-	if (class_create_file(ect_class, &class_attr_create_binary)) {
-		pr_err("%s: couldn't create generate_data node\n", __FILE__);
-		return -EINVAL;
-	}
+    ect_class = class_create(THIS_MODULE, "ect");
+    if (IS_ERR(ect_class)) {
+        pr_err("%s: couldn't create class\n", __FILE__);
+        return PTR_ERR(ect_class);
+    }
 
-	return 0;
+    return 0;
 }
 late_initcall_sync(ect_dump_init);
 #endif
@@ -2646,3 +3259,12 @@ void ect_init_map_io(void)
 	}
 	kfree(pages);
 }
+
+static struct bin_attribute ect_complete_dump_attr = {
+    .attr = {
+        .name = "complete_dump",
+        .mode = 0444,
+    },
+    .read = ect_complete_dump_read,
+    .size = 0,
+};
