@@ -195,7 +195,7 @@ static int ect_parse_dvfs_header(void *address, struct ect_info *info)
 		ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
 		
 		if (strcmp(ect_dvfs_domain->domain_name, "G3D") == 0) {
-			int new_num_level = ect_dvfs_domain->num_of_level + 1;
+			int new_num_level = ect_dvfs_domain->num_of_level + 3;
 			struct ect_dvfs_level *new_list_level;
 			unsigned int *new_list_dvfs_value;
 			int dvfs_value_size = ect_dvfs_domain->num_of_clock;
@@ -207,10 +207,16 @@ new_list_level = kzalloc(sizeof(struct ect_dvfs_level) * new_num_level, GFP_KERN
 					goto err_parse_domain;
 				}
 
-				new_list_level[0].level = 921000;
-				new_list_level[0].level_en = 1;
+				new_list_level[0].level = 949000;
+				new_list_level[0].level_en = 0;
+
+				new_list_level[1].level = 936000;
+				new_list_level[1].level_en = 0;
+
+				new_list_level[2].level = 927000;
+				new_list_level[2].level_en = 0;
 				
-				memcpy(&new_list_level[0], 
+				memcpy(&new_list_level[3], 
 					   ect_dvfs_domain->list_level, 
 					   sizeof(struct ect_dvfs_level) * ect_dvfs_domain->num_of_level);
 
@@ -221,11 +227,19 @@ new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * dvfs_value_
 					goto err_parse_domain;
 				}
 				
-				// Valores para 921000
+				// Valores para 949000
 				new_list_dvfs_value[0 * dvfs_value_size + 0] = 0;
 				new_list_dvfs_value[0 * dvfs_value_size + 1] = 1;
+				
+				// Valores para 936000
+				new_list_dvfs_value[1 * dvfs_value_size + 0] = 0;
+				new_list_dvfs_value[1 * dvfs_value_size + 1] = 1;
+				
+				// Valores para 927000
+				new_list_dvfs_value[2 * dvfs_value_size + 0] = 0;
+				new_list_dvfs_value[2 * dvfs_value_size + 1] = 1;
 
-				memcpy(&new_list_dvfs_value[0 * dvfs_value_size], 
+				memcpy(&new_list_dvfs_value[3 * dvfs_value_size], 
 					   ect_dvfs_domain->list_dvfs_value, 
 					   sizeof(unsigned int) * ect_dvfs_domain->num_of_level * dvfs_value_size);
 			
@@ -234,13 +248,44 @@ new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * dvfs_value_
 			ect_dvfs_domain->list_dvfs_value = new_list_dvfs_value;
 			
 // A frequência máxima é 949000, o maior dos novos níveis.
-				if (ect_dvfs_domain->max_frequency < 921000) {
-					ect_dvfs_domain->max_frequency = 921000;
+				if (ect_dvfs_domain->max_frequency < 949000) {
+					ect_dvfs_domain->max_frequency = 949000;
 				}
 			
 			break;
 		}
 	}
+
+    for (i = 0; i < ect_dvfs_header->num_of_domain; ++i) {
+        ect_dvfs_domain = &ect_dvfs_header->domain_list[i];
+        
+        if (strcmp(ect_dvfs_domain->domain_name, "CPUCL2") == 0) {
+            int new_num_level = ect_dvfs_domain->num_of_level + 3;
+            struct ect_dvfs_level *new_list_level;
+            unsigned int *new_list_dvfs_value;
+            
+            new_list_level = kzalloc(sizeof(struct ect_dvfs_level) * new_num_level, GFP_KERNEL);
+            
+            new_list_level[0].level = 3116000;
+            new_list_level[0].level_en = 0;
+            
+            memcpy(&new_list_level[1], ect_dvfs_domain->list_level,
+                   sizeof(struct ect_dvfs_level) * ect_dvfs_domain->num_of_level);
+            
+            new_list_dvfs_value = kzalloc(sizeof(unsigned int) * new_num_level * 2, GFP_KERNEL);
+            new_list_dvfs_value[0] = 0;
+            new_list_dvfs_value[1] = 0;
+            
+            memcpy(&new_list_dvfs_value[2], ect_dvfs_domain->list_dvfs_value, 
+                   sizeof(unsigned int) * ect_dvfs_domain->num_of_level * 2);
+            
+            ect_dvfs_domain->num_of_level = new_num_level;
+            ect_dvfs_domain->list_level = new_list_level;
+            ect_dvfs_domain->list_dvfs_value = new_list_dvfs_value;
+            
+            break;
+        }
+    }
 
     info->block_handle = ect_dvfs_header;
 
@@ -397,6 +442,32 @@ static int ect_parse_voltage_domain(int parser_version, void *address, struct ec
         }
     }
 
+    if (strcmp(domain->domain_name, "CPUCL2") == 0) {
+        int new_num_level = 25; // 24 + 1
+        int32_t *new_level_list;
+        unsigned char *new_voltages_step;
+        int32_t *new_level_en;
+        struct ect_voltage_table *table = &domain->table_list[0];
+
+        new_level_list = kmalloc(sizeof(int32_t) * new_num_level, GFP_KERNEL);
+        new_level_list[0] = 3116;
+        memcpy(&new_level_list[1], domain->level_list, sizeof(int32_t) * 19);
+        domain->level_list = new_level_list;
+        domain->num_of_level = new_num_level;
+
+        new_voltages_step = kmalloc(sizeof(unsigned char) * new_num_level * domain->num_of_group, GFP_KERNEL);
+        memset(new_voltages_step, 0, domain->num_of_group);
+        memcpy(&new_voltages_step[domain->num_of_group], table->voltages_step, 
+               sizeof(unsigned char) * 19 * domain->num_of_group);
+        table->voltages_step = new_voltages_step;
+
+        if (table->level_en) {
+            new_level_en = kmalloc(sizeof(int32_t) * new_num_level, GFP_KERNEL);
+            new_level_en[0] = 0;
+            memcpy(&new_level_en[1], table->level_en, sizeof(int32_t) * 19);
+            table->level_en = new_level_en;
+        }
+
         if (table->boot_level_idx != -1) table->boot_level_idx++;
         if (table->resume_level_idx != -1) table->resume_level_idx++;
     }
@@ -476,7 +547,7 @@ static int ect_parse_voltage_header(void *address, struct ect_info *info)
 				goto err_parse_voltage_domain;
 			}
 			
-			new_level_list[0] = 921;
+			new_level_list[0] = 949;
 			
 			memcpy(&new_level_list[1], 
 			       ect_voltage_domain->level_list, 
@@ -501,7 +572,7 @@ static int ect_parse_voltage_header(void *address, struct ect_info *info)
 					
 					int k;
 					for (k = 0; k < ect_voltage_domain->num_of_group; k++) {
-						new_voltages_step[k * new_num_level] = 120;
+						new_voltages_step[k * new_num_level] = 140;
 						
 						memcpy(&new_voltages_step[k * new_num_level + 1],
 						       &table->voltages_step[k * ect_voltage_domain->num_of_level],
@@ -988,6 +1059,34 @@ static int ect_parse_minlock_header(void *address, struct ect_info *info)
 		}
 	}
 
+	for (i = 0; i < ect_minlock_header->num_of_domain; ++i) {
+		ect_minlock_domain = &ect_minlock_header->domain_list[i];
+		
+		if (strcmp(ect_minlock_domain->domain_name, "DISP_INT") == 0) {
+			int new_num_level = ect_minlock_domain->num_of_level + 1;
+			struct ect_minlock_frequency *new_level;
+			int j;
+			
+			new_level = kzalloc(sizeof(struct ect_minlock_frequency) * new_num_level, GFP_KERNEL);
+			if (new_level == NULL) {
+				ret = -ENOMEM;
+				goto err_parse_minlock_domain;
+			}
+			
+			new_level[0].main_frequencies = 999000;
+			new_level[0].sub_frequencies = 533000;
+			
+			memcpy(&new_level[1], 
+			       ect_minlock_domain->level, 
+			       sizeof(struct ect_minlock_frequency) * ect_minlock_domain->num_of_level);
+			
+			ect_minlock_domain->num_of_level = new_num_level;
+			ect_minlock_domain->level = new_level;
+			
+			break;
+		}
+	}
+
 	info->block_handle = ect_minlock_header;
 
 	return 0;
@@ -1065,6 +1164,72 @@ static int ect_parse_gen_param_header(void *address, struct ect_info *info)
     for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
         ect_gen_param_table = &ect_gen_param_header->table_list[i];
         
+        if (strcmp(ect_gen_param_table->table_name, "FCPUCL2") == 0) {
+            int new_num_row = 25;
+            int32_t *new_parameter;
+            int32_t first_val, second_val;
+            
+            first_val = ect_gen_param_table->parameter[0];
+            second_val = ect_gen_param_table->parameter[1];
+            
+            new_parameter = kmalloc(sizeof(int32_t) * new_num_row * ect_gen_param_table->num_of_col, GFP_KERNEL);
+            if (new_parameter == NULL) {
+                ret = -ENOMEM;
+                goto err_parse_gen_param_table;
+            }
+            
+            new_parameter[0] = first_val;
+            new_parameter[1] = second_val;
+            new_parameter[2] = 3116;
+            new_parameter[3] = 3116;
+            
+            memcpy(&new_parameter[4], 
+                   &ect_gen_param_table->parameter[2], 
+                   sizeof(int32_t) * (ect_gen_param_table->num_of_row - 1) * ect_gen_param_table->num_of_col);
+            
+            ect_gen_param_table->num_of_row = new_num_row;
+            ect_gen_param_table->parameter = new_parameter;
+
+            break;
+        }
+    }
+
+    for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
+        ect_gen_param_table = &ect_gen_param_header->table_list[i];
+        
+        if (strcmp(ect_gen_param_table->table_name, "MDISP") == 0) {
+            int new_num_row = ect_gen_param_table->num_of_row + 1;
+            int32_t *new_parameter;
+            int j;
+            
+            new_parameter = kmalloc(sizeof(int32_t) * new_num_row * ect_gen_param_table->num_of_col, GFP_KERNEL);
+            if (new_parameter == NULL) {
+                ret = -ENOMEM;
+                goto err_parse_gen_param_table;
+            }
+            
+            for (j = 0; j < ect_gen_param_table->num_of_col; j++) {
+                if (j == 0) {
+                    new_parameter[j] = 999;
+                } else {
+                    new_parameter[j] = ect_gen_param_table->parameter[j];
+                }
+            }
+            
+            memcpy(&new_parameter[ect_gen_param_table->num_of_col], 
+                   ect_gen_param_table->parameter, 
+                   sizeof(int32_t) * ect_gen_param_table->num_of_row * ect_gen_param_table->num_of_col);
+            
+            ect_gen_param_table->num_of_row = new_num_row;
+            ect_gen_param_table->parameter = new_parameter;
+
+            break;
+        }
+    }
+
+    for (i = 0; i < ect_gen_param_header->num_of_table; ++i) {
+        ect_gen_param_table = &ect_gen_param_header->table_list[i];
+        
         if (strcmp(ect_gen_param_table->table_name, "MG3D") == 0) {
             int new_num_row = ect_gen_param_table->num_of_row + 1;
             int32_t *new_parameter;
@@ -1078,7 +1243,7 @@ static int ect_parse_gen_param_header(void *address, struct ect_info *info)
             
             for (j = 0; j < ect_gen_param_table->num_of_col; j++) {
                 if (j == 0) {
-                    new_parameter[j] = 921;
+                    new_parameter[j] = 949;
                 } else {
                     new_parameter[j] = ect_gen_param_table->parameter[j];
                 }
@@ -1111,7 +1276,7 @@ static int ect_parse_gen_param_header(void *address, struct ect_info *info)
             
             for (j = 0; j < ect_gen_param_table->num_of_col; j++) {
                 if (j == 0) {
-                    new_parameter[j] = 921;
+                    new_parameter[j] = 949;
                 } else {
                     new_parameter[j] = ect_gen_param_table->parameter[j];
                 }
