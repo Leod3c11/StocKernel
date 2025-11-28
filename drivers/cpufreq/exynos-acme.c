@@ -1629,7 +1629,7 @@ static __init int cpufreq_read_cpu_max_c3(char *cpu_max_c3)
 }
 __setup("cpu_max_c3=", cpufreq_read_cpu_max_c3);
 
-unsigned long arg_gpu_max __ro_after_init = 897000;
+unsigned long arg_gpu_max __ro_after_init = 921000;
 
 static __init int cpufreq_read_gpu_max(char *gpu_max)
 {
