@@ -597,7 +597,7 @@ static void apply_g3d_overvolt(void __iomem *sram_base,
 		int old_volt = fv_table->table[j].volt;
 		int freq = fv_table->table[j].rate;
 		
-		if (freq >= 949000) { // Changed from 962 to 949
+		if (freq >= 897000) { // Changed from 962 to 949
 			fv_table->table[j].volt += 2;  // 6 steps * 6250 = 37500uV = 37.5mV
 			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (+37500 uV)\n",
 			        j, freq, old_volt * STEP_UV,
