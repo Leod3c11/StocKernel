@@ -579,9 +579,101 @@ static const struct attribute_group asv_g_spec_grp = {
 #endif
 #endif /* CONFIG_SEC_FACTORY */
 
+static void apply_g3d_overvolt(void __iomem *sram_base, 
+                                volatile struct fvmap_header *fvmap_header,
+                                struct vclk *vclk, int idx)
+{
+	struct rate_volt_header *fv_table;
+	int j;
+	
+	if (vclk->margin_id != 4)
+		return;
+	
+	pr_info("Applying voltage modifications to G3D domain\n");
+	
+	fv_table = sram_base + fvmap_header[idx].o_ratevolt;
+	
+	for (j = 0; j < fvmap_header[idx].num_of_lv; j++) {
+		int old_volt = fv_table->table[j].volt;
+		int freq = fv_table->table[j].rate;
+		
+		if (freq >= 949000) { // Changed from 962 to 949
+			fv_table->table[j].volt += 2;  // 6 steps * 6250 = 37500uV = 37.5mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (+37500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 832000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 800000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 767000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 702000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 598000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 572000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 507000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 481000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 455000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 377000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 325000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 260000) {
+			fv_table->table[j].volt -= 2;  // 2 steps * 6250 = 12500uV ≈ 12mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-12500 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		} else if (freq >= 156000) {
+			fv_table->table[j].volt -= 2;  // 4 * 6250 = 25000uV ≈ 25mV
+			pr_info("G3D Level %d: %d kHz - Voltage: %d uV -> %d uV (-25000 uV)\n",
+			        j, freq, old_volt * STEP_UV,
+			        fv_table->table[j].volt * STEP_UV);
+		}
+	}
+}
+
 static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base)
 {
-	volatile struct fvmap_header *fvmap_header, *header;
+	struct fvmap_header *fvmap_header, *header;
 	struct rate_volt_header *old, *new;
 	struct clocks *clks;
 	struct pll_header *plls;
@@ -628,6 +720,8 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 		new = map_base + fvmap_header[i].o_ratevolt;
 
 		check_percent_margin(old, fvmap_header[i].num_of_lv);
+
+		apply_g3d_overvolt(sram_base, fvmap_header, vclk, i);
 
 		margin = init_margin_table[vclk->margin_id];
 		if (margin)
