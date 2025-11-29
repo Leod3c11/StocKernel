@@ -638,13 +638,13 @@ struct cpu_info cpuinfo[] = {
 	},
 	[1] = {
 		.min = 4,
-		.max = 5,
-		.total = 2,
+		.max = 6,
+		.total = 3,
 	},
 	[2] = {
-		.min = 6,
+		.min = 7,
 		.max = 7,
-		.total = 2,
+		.total = 1,
 	},
 };
 #endif
